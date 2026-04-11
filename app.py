@@ -9,7 +9,7 @@ from tkinter import messagebox
 root = tk.Tk()
 root.title("Smart Pokayoke")
 root.geometry("1000x750")
-
+root.bind("<space>", on_space_press)
 # =========================
 # MAIN FRAME
 # =========================
@@ -17,7 +17,7 @@ main_frame = tk.Frame(root, bg="white", highlightbackground="green", highlightth
 main_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
 # =========================
-# GRID CONFIG
+# GRID Cấu hình
 # =========================
 main_frame.rowconfigure(0, weight=0)  # header
 main_frame.rowconfigure(1, weight=0)  # control
@@ -52,110 +52,9 @@ exit_btn.pack(side="left", padx=5)
 # =========================
 # CONTROL PANEL: DONE
 # =========================
-
 # =========================
-# DRAW BOUNDING BOX
+# VẼ BBOX VARIABLES
 # =========================
-points = []
-rect_id = None
-draw_mode = False
-def load_box_from_file():
-    global rect_id
-
-    try:
-        with open("coordinate.txt", "r") as f:
-            content = f.read().strip()
-
-        if not content:
-            print("File rỗng!")
-            return False
-
-        data = content.split(",")
-        if len(data) != 4:
-            print("Sai format!")
-            return False
-
-        x1, y1, x2, y2 = map(int, data)
-
-        if rect_id is not None:
-            canvas.delete(rect_id)
-
-        rect_id = canvas.create_rectangle(
-            x1, y1, x2, y2,
-            outline="blue",
-            width=2
-        )
-
-        print("Loaded box from file")
-        return True
-
-    except Exception as e:
-        print("Error:", e)
-        return False
-
-def on_click(event):
-    global points, rect_id, draw_mode
-
-    x, y = event.x, event.y
-    points.append((x, y))
-
-    if len(points) == 2:
-        (x1, y1), (x2, y2) = points
-
-        if rect_id is not None:
-            canvas.delete(rect_id)
-
-        rect_id = canvas.create_rectangle(
-            x1, y1, x2, y2,
-            outline="red",
-            width=2
-        )
-
-        # 🔥 LUÔN LƯU FILE
-        try:
-            with open("coordinate.txt", "w") as f:
-                f.write(f"{x1},{y1},{x2},{y2}")
-            print("Saved coordinate.txt")
-        except Exception as e:
-            print("Save error:", e)
-
-        # reset
-        points = []
-
-        # tắt draw mode
-        canvas.unbind("<Button-1>")
-        draw_mode = False
-        print("Draw mode OFF (auto)")
-   
-def toggle_draw():
-    global draw_mode
-
-    if os.path.exists("coordinate.txt"):
-        result = messagebox.askyesno(
-            "Thông báo",
-            "Đã tồn tại bounding box.\nBạn có muốn vẽ lại không?"
-        )
-
-        if not result:  # NO → dùng box cũ
-            if load_box_from_file():
-                return
-            else:
-                messagebox.showerror(
-                    "Lỗi",
-                    "Không thể tải bounding box cũ! Bạn hãy vẽ lại."
-                )
-                print("Load failed → switching to draw mode")
-                os.remove("coordinate.txt")
-                print("Deleted old file")
-
-        else:  # YES → vẽ lại
-            os.remove("coordinate.txt")
-            print("Deleted old file")
-
-    # bật draw mode
-    draw_mode = True
-    canvas.bind("<Button-1>", on_click)
-    print("Draw mode ON")
 
 control = tk.Frame(main_frame, bg="white")
 control.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
@@ -178,9 +77,9 @@ refresh_btn = tk.Button(control,text="Làm mới", fg="green", command= lambda: 
 connect_btn = tk.Button(control, text="Kết nối", fg="green", command= lambda: connect(connect_btn, combo_box), font=("Times New Roman", 12), relief="flat")
 save_run_btn = tk.Button(control, text="LƯU & CHẠY NGẦM", fg="green", command= lambda: save_and_run(save_run_btn), font=("Times New Roman", 12, "bold"), relief="flat")
 pause_btn = tk.Button(control, text="DỪNG", fg="green", command= lambda: pause(pause_btn), font=("Times New Roman", 12, "bold"), relief="flat")
-draw_bbox_btn = tk.Button(control, text="VẼ BOUNDING BOX", command=toggle_draw, fg="red", font=("Times New Roman", 12, "bold"), relief="flat")
+draw_bbox_btn = tk.Button(control, text="VẼ BOUNDING BOX", command=lambda: toggle_draw(canvas, state), fg="red", font=("Times New Roman", 12, "bold"), relief="flat")
 
-# set position for the variable
+# set vị trí các widget trong control panel
 combo_box.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
 refresh_btn.grid(row=0, column=2, sticky="ew", padx=5, pady=5)
 connect_btn.grid(row=0, column=3, sticky="ew", padx=5, pady=5)
@@ -212,7 +111,6 @@ code_text.grid(row=2, column=1, columnspan=3, sticky="ew", padx=5, pady=5)
 # CANVAS (FULL RESPONSIVE)
 # =========================
 
-
 canvas = tk.Canvas(
     main_frame,
     # width=640,
@@ -223,7 +121,6 @@ canvas = tk.Canvas(
 )
 
 canvas.grid(row=3, column=0, padx=10, pady=10) # , sticky="nsew"
-
 # =========================
 # CAMERA SETUP
 # =========================
@@ -231,16 +128,54 @@ cap = cv.VideoCapture(0)  # 0 = webcam
 # tạo image ban đầu (quan trọng)
 canvas_img = canvas.create_image(0, 0, anchor="nw")
 
+current_frame = None
+
+
+def get_current_frame():
+    return current_frame
+
 def update_frame():
     ret, frame = cap.read()
     if ret:
         frame = cv.flip(frame, 1)
+
+        if state["points"]:
+            # vẽ bbox
+            if state["tracking"]:
+                color = (0, 255, 0) if state["predict_result"] == "On" else (0, 0, 255)
+                text = f"Predict model: {state['predict_result']}"
+                # vẽ text
+                cv.putText(
+                        frame,
+                        text,
+                        (10, 30),
+                        cv.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        color,
+                        2
+                    )
+                # state["predict_result"] = None
+            else:
+                state["predict_result"] = None
+                color = (0, 255, 0) if state["predict_result"] == "On" else (0, 0, 255)
+                text = f"Predict model: {state['predict_result']}"
+                # vẽ text
+                cv.putText(
+                        frame,
+                        text,
+                        (10, 30),
+                        cv.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        color,
+                        2
+                    )
+
         frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
 
         # lấy kích thước frame
         h, w, _ = frame.shape
 
-        # ✅ set lại kích thước canvas theo frame
+        # set lại kích thước canvas theo frame
         canvas.config(width=w, height=h)
 
         img = Image.fromarray(frame)
@@ -250,10 +185,22 @@ def update_frame():
         canvas.imgtk = imgtk
 
         # giữ rectangle luôn ở trên
-        if rect_id is not None:
-            canvas.tag_raise(rect_id)
+        if state["rect_id"] is not None:
+            canvas.tag_raise(state["rect_id"])
+                                         
     root.after(10, update_frame)
 
 update_frame()
 
+# press space to tracking
+root.bind(
+    "<KeyPress-space>",
+    lambda event: on_space_press(
+        event,
+        state,
+        get_current_frame,
+    )
+)
+
+root.bind("<KeyRelease-space>", on_space_release)
 root.mainloop()
