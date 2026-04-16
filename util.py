@@ -9,7 +9,7 @@ state = {
     "start_y": None,
     "points": [],
     "predict_result": None,
-    "tracking": False,
+    "press_keyboard": False,
 }
 
 def connect(btn_connect, combo_box):
@@ -27,6 +27,9 @@ def pause(btn_pause):
 def log_out(btn_log_out):
     print("Logging out...")
     
+def crop_img(frame, x1, y1, x2, y2):
+    return frame[y1:y2, x1:x2]
+
 def load_box_from_file(canvas, state):
     try:
         with open("coordinate.txt", "r") as f:
@@ -136,37 +139,16 @@ def toggle_draw(canvas, state):
 
     print("Draw mode ON")
 
-def predict(string=None):
-    return "On" if string is not None else "Off"
+def predict(frame=None):
+    return "On" if frame is not None else "Off"
 
-def on_space_press(event, state, get_frame):
-    state["tracking"] = True
-    frame = get_frame()
-
-    # if frame is None:
-    #     print("Chưa có frame!")
-    #     return
-
+def on_space_press(event, state):
     if not state["points"]:
         messagebox.showerror("Lỗi", "Chưa có bounding box!")
         return 
+    state["press_keyboard"] = True
 
-    state["predict_result"] = predict("dummy input")    
-
-    # x1, y1, x2, y2 = state["points"]
-
-    # # crop
-    # crop = frame[y1:y2, x1:x2]
-
-    # # predict
-    # result = predict_func(crop)
-
-    # set_predict_result(result)
-
-    # print("Predict:", result)
-
-def on_space_release(event):
-    state["tracking"] = False
+def on_space_release(event, state):
+    state["press_keyboard"] = False
     # if event.keysym == "space":
     #     state["predict_result"] = None
-    pass
